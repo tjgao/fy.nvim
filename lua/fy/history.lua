@@ -29,15 +29,15 @@ local function display_level(level)
 end
 
 local function format_text(entry)
-    local msg = tostring(entry.msg or "")
-    msg = msg:gsub("\r", "")
-    msg = msg:gsub("\n", " | ")
-    msg = msg:gsub("%s+", " ")
-    msg = vim.trim(msg)
-    if entry.title and entry.title ~= "" then
-        return string.format("[%s] %s", tostring(entry.title), msg)
+    local msg = tostring(entry.msg or ""):gsub("\r", "")
+    local lines = vim.split(msg, "\n", { plain = true })
+    if #lines == 0 then
+        lines = { "" }
     end
-    return msg
+    if entry.title and entry.title ~= "" then
+        table.insert(lines, 1, string.format("[%s]", tostring(entry.title)))
+    end
+    return lines
 end
 
 function M.new(ctx)
@@ -109,7 +109,6 @@ function M.new(ctx)
         local pad_left = cfg.padding.left
 
         local inner_w = math.max(1, win_w - 2 - pad_left - pad_right)
-        local max_rows = math.max(1, win_h - 2 - pad_top - pad_bottom)
         local left_pad = string.rep(" ", pad_left)
         local right_pad = string.rep(" ", pad_right)
         local function with_side_padding(text)
@@ -121,24 +120,26 @@ function M.new(ctx)
             lines[1] = with_side_padding(truncate("No notifications yet", inner_w))
             hls[1] = { 0, pad_left, -1, "NotifyDimText" }
         else
-            local start_idx = math.max(1, #entries - max_rows + 1)
             local line_idx = 0
-            for i = #entries, start_idx, -1 do
+            for i = #entries, 1, -1 do
                 local entry = entries[i]
                 local lvl_name = entry.level or "INFO"
                 local lvl_label = display_level(lvl_name)
-                local text = format_text(entry)
+                local entry_lines = format_text(entry)
                 local prefix = string.format("%s  %-" .. max_level_len .. "s  ", entry.ts, lvl_label)
-                local available = inner_w - vim.fn.strdisplaywidth(prefix)
-                local rendered = with_side_padding(prefix .. truncate(text, available))
-
-                lines[#lines + 1] = rendered
-
+                local continuation_prefix = string.rep(" ", #prefix)
                 local level_hl = (ctx.get_config().highlights[lvl_name] or ctx.get_config().highlights.INFO)
-                hls[#hls + 1] = { line_idx, pad_left + 0, pad_left + 11, "NotifyDimText" }
-                hls[#hls + 1] = { line_idx, pad_left + 13, pad_left + 13 + max_level_len, level_hl.title }
-                hls[#hls + 1] = { line_idx, pad_left + 13 + max_level_len + 2, -1, level_hl.body }
-                line_idx = line_idx + 1
+                for idx, text in ipairs(entry_lines) do
+                    local line_prefix = idx == 1 and prefix or continuation_prefix
+                    lines[#lines + 1] = with_side_padding(line_prefix .. text)
+
+                    if idx == 1 then
+                        hls[#hls + 1] = { line_idx, pad_left + 0, pad_left + 11, "NotifyDimText" }
+                        hls[#hls + 1] = { line_idx, pad_left + 13, pad_left + 13 + max_level_len, level_hl.title }
+                    end
+                    hls[#hls + 1] = { line_idx, pad_left + #line_prefix, -1, level_hl.body }
+                    line_idx = line_idx + 1
+                end
             end
         end
 
@@ -180,7 +181,7 @@ function M.new(ctx)
         })
 
         ctx.set_win_option(winnr, "winhl", "Normal:NotifyBackground,FloatBorder:NotifyINFOBorder")
-        ctx.set_win_option(winnr, "wrap", false)
+        ctx.set_win_option(winnr, "wrap", vim.o.wrap)
         ctx.set_win_option(winnr, "cursorline", true)
 
         local close_window = function()

@@ -68,6 +68,7 @@ For compatibility, both `history = false` (snacks.notifier style) and
 
 History row format is: `MM/DD HH:MM  LEVEL  text`.
 `WARN` is displayed as `WARNING`.
+Multi-line notifications are preserved in history (not collapsed to one line).
 
 ### `history` table
 
